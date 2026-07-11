@@ -115,7 +115,7 @@ class LoginWindow(QWidget):
 
     def init_ui(self):
         self.setWindowTitle("Configuracion de la base de datos")
-        self.setGeometry(100, 100, 400, 350)
+        self.setGeometry(100, 100, 400, 320)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
@@ -129,8 +129,7 @@ class LoginWindow(QWidget):
         )
 
         self.check_save_credentials = QCheckBox("Guardar datos de inicio de sesion")
-        self.check_create_db = QCheckBox("Crear base de datos")
-        self.check_create_tables = QCheckBox("Crear tabla")
+        self.check_create_db = QCheckBox("Crear base de datos y tablas")
 
         button_login = QPushButton("Iniciar")
         button_login.setFixedHeight(30)
@@ -138,7 +137,6 @@ class LoginWindow(QWidget):
 
         layout.addWidget(self.check_save_credentials)
         layout.addWidget(self.check_create_db)
-        layout.addWidget(self.check_create_tables)
         layout.addWidget(button_login)
 
         self.setLayout(layout)
@@ -183,15 +181,6 @@ class LoginWindow(QWidget):
                                 "Usuario o contrasena incorrectos o la base de datos no esta disponible.")
             return False
 
-    def ejecutar_script(self, nombre_script):
-        if nombre_script == 'create_database.py':
-            crear_base_de_datos()
-            return "Base de datos creada/verificada"
-        elif nombre_script == 'create_tables.py':
-            crear_tablas()
-            return "Tablas creadas/verificadas"
-        raise Exception(f"Script no soportado: {nombre_script}")
-
     def login(self):
         db_name = self.entry_db_name.text()
         db_user = self.entry_db_user.text()
@@ -204,17 +193,11 @@ class LoginWindow(QWidget):
 
         if self.check_create_db.isChecked():
             try:
-                resultado = self.ejecutar_script('create_database.py')
-                QMessageBox.information(self, "Base de datos", resultado)
+                crear_base_de_datos()
+                crear_tablas()
+                QMessageBox.information(self, "Base de datos", "Base de datos y tablas creadas/verificadas")
             except Exception as e:
                 QMessageBox.warning(self, "Error al crear la base de datos", str(e))
-
-        if self.check_create_tables.isChecked():
-            try:
-                resultado = self.ejecutar_script('create_tables.py')
-                QMessageBox.information(self, "Tabla", resultado)
-            except Exception as e:
-                QMessageBox.warning(self, "Error al crear la tabla", str(e))
 
         config = configparser.ConfigParser()
         config['database'] = {
@@ -464,13 +447,7 @@ class TurneroApp(QTabWidget):
         pend = len(pendientes)
         self.lbl_contador_hoy.setText(f"Turnos: {total} total  |  {pend} pendiente(s)")
 
-    def _avanzar_turno_actual(self):
-        pendientes = [t for t in self._turnos_hoy if t['estado'] == 'pendiente']
-        if not pendientes:
-            QMessageBox.information(self, "Sin turnos", "No hay turnos pendientes para hoy")
-            return
-
-        turno = pendientes[0]
+    def _avanzar_turno(self, turno):
         confirmacion = QMessageBox.question(
             self, "Avanzar turno",
             f"Marcar como atendido a {turno['nombre']} {turno['apellido']}?",
@@ -490,6 +467,13 @@ class TurneroApp(QTabWidget):
             self._refrescar_hoy()
         else:
             QMessageBox.critical(self, "Error", err)
+
+    def _avanzar_turno_actual(self):
+        pendientes = [t for t in self._turnos_hoy if t['estado'] == 'pendiente']
+        if not pendientes:
+            QMessageBox.information(self, "Sin turnos", "No hay turnos pendientes para hoy")
+            return
+        self._avanzar_turno(pendientes[0])
 
     def _obtener_turno_hoy_de_item(self, item):
         if not item:
@@ -511,7 +495,7 @@ class TurneroApp(QTabWidget):
         menu = QMenu(self)
 
         action_avanzar = QAction("Atender turno", self)
-        action_avanzar.triggered.connect(self._avanzar_turno_actual)
+        action_avanzar.triggered.connect(lambda: self._avanzar_turno(turno))
 
         action_reprogramar = QAction("Reprogramar a otro dia", self)
         action_reprogramar.triggered.connect(lambda: self._reprogramar_turno_hoy(turno))
@@ -685,12 +669,13 @@ class TurneroApp(QTabWidget):
         else:
             if "no existe la tabla" in error.lower() or "does not exist" in error.lower():
                 resp = QMessageBox.question(self, "Tabla no existe",
-                    "La tabla de turnos no existe. Desea crearla?",
+                    "La tabla de turnos no existe. Desea crear la base de datos y las tablas?",
                     QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
                 if resp == QMessageBox.StandardButton.Yes:
                     try:
+                        crear_base_de_datos()
                         crear_tablas()
-                        QMessageBox.information(self, "Listo", "Tablas creadas. Intente registrar de nuevo.")
+                        QMessageBox.information(self, "Listo", "Base de datos y tablas creadas. Intente registrar de nuevo.")
                     except Exception as e:
                         QMessageBox.critical(self, "Error", f"No se pudieron crear las tablas:\n{e}")
             else:
