@@ -211,6 +211,28 @@ def eliminar_turno(turno_id):
         return False, f"Error al eliminar turno: {e}"
 
 
+def editar_turno(turno_id, nombre, apellido, dni, obra_social, motivo_consulta, fecha, hora):
+    try:
+        with connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE turnos
+                SET nombre = %s, apellido = %s, dni = %s, obra_social = %s,
+                    motivo_consulta = %s, fecha = %s, hora = %s
+                WHERE id = %s
+            """, (nombre, apellido, dni, obra_social, motivo_consulta, fecha, hora, turno_id))
+            conn.commit()
+            cur.close()
+            return True, None
+
+    except _DB_ERRORS:
+        return False, MSG_NO_CONEXION
+    except psycopg2.errors.UndefinedTable:
+        return False, MSG_NO_TABLA
+    except Exception as e:
+        return False, f"Error al editar turno: {e}"
+
+
 def avanzar_turno(turno_id):
     try:
         with connection() as conn:

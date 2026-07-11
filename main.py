@@ -9,9 +9,9 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QTextEdit, QCheckBox, QMessageBox,
     QListWidget, QListWidgetItem, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QMenu, QFileDialog, QStatusBar,
-    QFrame, QSplitter, QDateTimeEdit
+    QFrame, QSplitter, QDateEdit, QTimeEdit
 )
-from PyQt6.QtCore import Qt, QTimer, QDateTime
+from PyQt6.QtCore import Qt, QTimer, QDateTime, QDate, QTime
 from PyQt6.QtGui import QFont, QIcon, QAction, QKeySequence, QShortcut, QColor, QBrush
 from app.turno_manager import (
     agregar_turno,
@@ -19,6 +19,7 @@ from app.turno_manager import (
     obtener_todos_los_turnos,
     buscar_turnos,
     eliminar_turno,
+    editar_turno,
     avanzar_turno,
     registrar_cambio,
     obtener_historial,
@@ -410,7 +411,7 @@ class TurneroApp(QTabWidget):
 
         exito, err = avanzar_turno(turno['id'])
         if exito:
-            registrar_cambio("turnos", turno['id'], "TURNO ATENDIDO",
+            registrar_cambio("turnos", turno['id'], "Atendido",
                              f"{turno['nombre']} {turno['apellido']} (DNI: {turno['dni']})",
                              usuario=self._usuario_actual(),
                              dni=turno['dni'],
@@ -456,13 +457,20 @@ class TurneroApp(QTabWidget):
         self.entry_motivo.setFixedHeight(30)
         self.entry_motivo.setPlaceholderText("Ingrese motivo de consulta")
 
-        label_fecha = QLabel("Fecha y hora del turno:")
+        label_fecha = QLabel("Fecha del turno:")
         label_fecha.setFont(QFont("Open Sans", 12))
-        self.entry_fecha_hora = QDateTimeEdit()
-        self.entry_fecha_hora.setFixedHeight(30)
-        self.entry_fecha_hora.setDateTime(QDateTime.currentDateTime())
-        self.entry_fecha_hora.setDisplayFormat("dd/MM/yyyy HH:mm")
-        self.entry_fecha_hora.setCalendarPopup(True)
+        self.entry_fecha = QDateEdit()
+        self.entry_fecha.setFixedHeight(30)
+        self.entry_fecha.setDate(QDate.currentDate())
+        self.entry_fecha.setCalendarPopup(True)
+        self.entry_fecha.setDisplayFormat("dd/MM/yyyy")
+
+        label_hora = QLabel("Hora del turno:")
+        label_hora.setFont(QFont("Open Sans", 12))
+        self.entry_hora = QTimeEdit()
+        self.entry_hora.setFixedHeight(30)
+        self.entry_hora.setTime(QTime.currentTime())
+        self.entry_hora.setDisplayFormat("HH:mm")
 
         button_registrar = QPushButton("Registrar turno")
         button_registrar.setFixedHeight(35)
@@ -479,7 +487,9 @@ class TurneroApp(QTabWidget):
         layout.addWidget(label_motivo)
         layout.addWidget(self.entry_motivo)
         layout.addWidget(label_fecha)
-        layout.addWidget(self.entry_fecha_hora)
+        layout.addWidget(self.entry_fecha)
+        layout.addWidget(label_hora)
+        layout.addWidget(self.entry_hora)
         layout.addSpacing(10)
         layout.addWidget(button_registrar)
 
@@ -491,7 +501,9 @@ class TurneroApp(QTabWidget):
         dni = self.entry_dni.text().strip()
         obra_social = self.entry_obra_social.text().strip()
         motivo = self.entry_motivo.text().strip()
-        fecha_hora = self.entry_fecha_hora.dateTime().toPyDateTime()
+        fecha = self.entry_fecha.date().toPyDate()
+        hora = self.entry_hora.time().toPyTime()
+        fecha_hora = datetime.combine(fecha, hora)
 
         if not (nombre and apellido and dni):
             QMessageBox.warning(self, "Error", "Nombre, apellido y DNI son obligatorios")
@@ -499,9 +511,9 @@ class TurneroApp(QTabWidget):
 
         usuario = self._usuario_actual()
         exito, error = agregar_turno(nombre, apellido, dni, obra_social, motivo, usuario,
-                                     fecha=fecha_hora.date(), hora=fecha_hora)
+                                     fecha=fecha, hora=fecha_hora)
         if exito:
-            registrar_cambio("turnos", None, "ALTA TURNO",
+            registrar_cambio("turnos", None, "Alta",
                              f"{nombre} {apellido} (DNI: {dni}) - {fecha_hora.strftime('%d/%m/%Y %H:%M')}",
                              usuario=usuario,
                              dni=dni, nombre=nombre, apellido=apellido)
@@ -511,7 +523,8 @@ class TurneroApp(QTabWidget):
             self.entry_dni.clear()
             self.entry_obra_social.clear()
             self.entry_motivo.clear()
-            self.entry_fecha_hora.setDateTime(QDateTime.currentDateTime())
+            self.entry_fecha.setDate(QDate.currentDate())
+            self.entry_hora.setTime(QTime.currentTime())
             self._refrescar_hoy()
         else:
             if "no existe la tabla" in error.lower() or "does not exist" in error.lower():
@@ -692,10 +705,14 @@ class TurneroApp(QTabWidget):
         action_ver = QAction("Ver detalle", self)
         action_ver.triggered.connect(lambda: self._ver_detalle_turno_directo(turno))
 
+        action_editar = QAction("Editar turno", self)
+        action_editar.triggered.connect(lambda: self._editar_turno_directo(turno))
+
         action_eliminar = QAction("Eliminar turno", self)
         action_eliminar.triggered.connect(lambda: self._eliminar_turno_directo(turno))
 
         menu.addAction(action_ver)
+        menu.addAction(action_editar)
         menu.addSeparator()
         menu.addAction(action_eliminar)
 
@@ -735,6 +752,90 @@ class TurneroApp(QTabWidget):
         ventana.setLayout(v_layout)
         ventana.show()
 
+    def _editar_turno_directo(self, turno):
+        ventana = QWidget(self.container, Qt.WindowType.Dialog)
+        ventana.setWindowTitle("Editar turno")
+        ventana.setFixedSize(380, 480)
+
+        v_layout = QVBoxLayout()
+        v_layout.setContentsMargins(16, 16, 16, 16)
+
+        entry_nombre = QLineEdit(turno['nombre'])
+        entry_apellido = QLineEdit(turno['apellido'])
+        entry_dni = QLineEdit(turno['dni'])
+        entry_obra_social = QLineEdit(turno.get('obra_social') or "")
+        entry_motivo = QLineEdit(turno.get('motivo_consulta') or "")
+
+        entry_fecha = QDateEdit()
+        entry_fecha.setFixedHeight(30)
+        entry_fecha.setCalendarPopup(True)
+        entry_fecha.setDisplayFormat("dd/MM/yyyy")
+        if turno.get('hora') and isinstance(turno['hora'], datetime):
+            entry_fecha.setDate(QDate(turno['hora'].year, turno['hora'].month, turno['hora'].day))
+        elif turno.get('fecha'):
+            d = turno['fecha']
+            entry_fecha.setDate(QDate(d.year, d.month, d.day))
+
+        entry_hora = QTimeEdit()
+        entry_hora.setFixedHeight(30)
+        entry_hora.setDisplayFormat("HH:mm")
+        if turno.get('hora') and isinstance(turno['hora'], datetime):
+            entry_hora.setTime(QTime(turno['hora'].hour, turno['hora'].minute))
+
+        btn_guardar = QPushButton("Guardar cambios")
+
+        v_layout.addWidget(QLabel("Nombre:"))
+        v_layout.addWidget(entry_nombre)
+        v_layout.addWidget(QLabel("Apellido:"))
+        v_layout.addWidget(entry_apellido)
+        v_layout.addWidget(QLabel("DNI:"))
+        v_layout.addWidget(entry_dni)
+        v_layout.addWidget(QLabel("Obra Social:"))
+        v_layout.addWidget(entry_obra_social)
+        v_layout.addWidget(QLabel("Motivo de consulta:"))
+        v_layout.addWidget(entry_motivo)
+        v_layout.addWidget(QLabel("Fecha:"))
+        v_layout.addWidget(entry_fecha)
+        v_layout.addWidget(QLabel("Hora:"))
+        v_layout.addWidget(entry_hora)
+        v_layout.addSpacing(10)
+        v_layout.addWidget(btn_guardar)
+
+        ventana.setLayout(v_layout)
+
+        def guardar():
+            nuevo_nombre = entry_nombre.text().strip()
+            nuevo_apellido = entry_apellido.text().strip()
+            nuevo_dni = entry_dni.text().strip()
+            nueva_obra = entry_obra_social.text().strip()
+            nuevo_motivo = entry_motivo.text().strip()
+            nueva_fecha = entry_fecha.date().toPyDate()
+            nueva_hora = entry_hora.time().toPyTime()
+            nueva_fecha_hora = datetime.combine(nueva_fecha, nueva_hora)
+
+            if not (nuevo_nombre and nuevo_apellido and nuevo_dni):
+                QMessageBox.warning(ventana, "Error", "Nombre, apellido y DNI son obligatorios")
+                return
+
+            exito, err = editar_turno(
+                turno['id'], nuevo_nombre, nuevo_apellido, nuevo_dni,
+                nueva_obra, nuevo_motivo,
+                nueva_fecha, nueva_fecha_hora
+            )
+            if exito:
+                registrar_cambio("turnos", turno['id'], "Modificado",
+                                 f"{nuevo_nombre} {nuevo_apellido} (DNI: {nuevo_dni}) - {nueva_fecha_hora.strftime('%d/%m/%Y %H:%M')}",
+                                 usuario=self._usuario_actual(),
+                                 dni=nuevo_dni, nombre=nuevo_nombre, apellido=nuevo_apellido)
+                QMessageBox.information(ventana, "Listo", "Turno actualizado")
+                ventana.close()
+                self._refrescar_todos()
+            else:
+                QMessageBox.critical(ventana, "Error", err)
+
+        btn_guardar.clicked.connect(guardar)
+        ventana.show()
+
     def _eliminar_turno_directo(self, turno):
         confirmacion = QMessageBox.question(
             self, "Confirmar eliminacion",
@@ -746,7 +847,7 @@ class TurneroApp(QTabWidget):
 
         exito, err = eliminar_turno(turno['id'])
         if exito:
-            registrar_cambio("turnos", None, "BAJA TURNO",
+            registrar_cambio("turnos", None, "Baja",
                              f"{turno['nombre']} {turno['apellido']} (DNI: {turno['dni']})",
                              usuario=self._usuario_actual(),
                              dni=turno['dni'],
