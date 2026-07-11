@@ -5,6 +5,7 @@ venv/
 .env
 config.ini
 license.lic
+SERIAL MAESTRO.txt
 dist/
 build/
 *.spec
