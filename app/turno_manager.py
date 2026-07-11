@@ -1,346 +1,180 @@
-import psycopg2
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
-from psycopg2 import sql
-from config.db_config import connection
+import json
 from datetime import date, datetime
+from app import api_client
 
-MSG_NO_CONEXION = "No se pudo conectar a la base de datos. Verifique que exista y las credenciales sean correctas."
-MSG_NO_TABLA = "La tabla de turnos no existe. Debe crear la tabla desde la pantalla de inicio de sesion."
+MSG_NO_CONEXION = "No se pudo conectar al servidor. Verifique que el servidor FastAPI este corriendo."
+MSG_NO_TABLA = "La tabla de turnos no existe. Debe crear la base de datos y tablas desde la pantalla de inicio de sesion."
 
-_DB_ERRORS = (psycopg2.OperationalError, UnicodeDecodeError, psycopg2.InterfaceError)
+
+def _check(resp):
+    if resp.get("status") == "error":
+        detail = resp.get("detail", "")
+        if "does not exist" in detail or "no existe" in detail:
+            return None, MSG_NO_TABLA
+        return None, detail
+    return resp.get("data", resp), None
 
 
 def crear_base_de_datos():
-    from config.db_config import _read_config
-    params = _read_config()
-    conn = psycopg2.connect(
-        dbname="postgres",
-        user=params["user"],
-        password=params["password"],
-        host=params["host"],
-        port=params["port"]
-    )
-    conn.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
-    cur = conn.cursor()
-    cur.execute("SELECT 1 FROM pg_database WHERE datname=%s;", (params["dbname"],))
-    if not cur.fetchone():
-        cur.execute(sql.SQL("CREATE DATABASE {};").format(sql.Identifier(params["dbname"])))
-    cur.close()
-    conn.close()
-
-
-QUERY_TURNOS = """
-CREATE TABLE IF NOT EXISTS turnos (
-    id SERIAL PRIMARY KEY,
-    nombre VARCHAR(100) NOT NULL,
-    apellido VARCHAR(100) NOT NULL,
-    dni VARCHAR(20) NOT NULL,
-    obra_social VARCHAR(100),
-    motivo_consulta TEXT,
-    fecha DATE DEFAULT CURRENT_DATE,
-    hora TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    estado VARCHAR(20) DEFAULT 'pendiente',
-    usuario VARCHAR(100)
-);
-"""
-
-QUERY_HISTORIAL = """
-CREATE TABLE IF NOT EXISTS historial_cambios (
-    id SERIAL PRIMARY KEY,
-    tabla VARCHAR(50) NOT NULL,
-    registro_id INTEGER,
-    accion VARCHAR(50) NOT NULL,
-    detalle TEXT,
-    usuario VARCHAR(100),
-    dni VARCHAR(20),
-    nombre VARCHAR(100),
-    apellido VARCHAR(100),
-    fecha TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-"""
-
-MIGRATE_HISTORIAL = """
-ALTER TABLE historial_cambios ADD COLUMN IF NOT EXISTS usuario VARCHAR(100);
-ALTER TABLE historial_cambios ADD COLUMN IF NOT EXISTS dni VARCHAR(20);
-ALTER TABLE historial_cambios ADD COLUMN IF NOT EXISTS nombre VARCHAR(100);
-ALTER TABLE historial_cambios ADD COLUMN IF NOT EXISTS apellido VARCHAR(100);
-"""
+    resp = api_client.crear_db()
+    if resp.get("status") == "error":
+        raise Exception(resp.get("detail", "Error al crear base de datos"))
 
 
 def crear_tablas():
-    with connection() as conn:
-        cur = conn.cursor()
-        cur.execute(QUERY_TURNOS)
-        cur.execute(QUERY_HISTORIAL)
-        cur.execute(MIGRATE_HISTORIAL)
-        conn.commit()
-        cur.close()
-
-
-def _row_to_dict(row):
-    if not row:
-        return None
-    return {
-        "id": row[0],
-        "nombre": row[1],
-        "apellido": row[2],
-        "dni": row[3],
-        "obra_social": row[4],
-        "motivo_consulta": row[5],
-        "fecha": row[6],
-        "hora": row[7],
-        "estado": row[8],
-        "usuario": row[9],
-    }
+    resp = api_client.crear_tablas()
+    if resp.get("status") == "error":
+        raise Exception(resp.get("detail", "Error al crear tablas"))
 
 
 def agregar_turno(nombre, apellido, dni, obra_social, motivo_consulta, usuario=None, fecha=None, hora=None):
-    try:
-        with connection() as conn:
-            cur = conn.cursor()
-            if fecha and hora:
-                cur.execute("""
-                    INSERT INTO turnos (nombre, apellido, dni, obra_social, motivo_consulta, fecha, hora, usuario)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
-                """, (nombre, apellido, dni, obra_social, motivo_consulta, fecha, hora, usuario))
-            else:
-                cur.execute("""
-                    INSERT INTO turnos (nombre, apellido, dni, obra_social, motivo_consulta, usuario)
-                    VALUES (%s, %s, %s, %s, %s, %s);
-                """, (nombre, apellido, dni, obra_social, motivo_consulta, usuario))
-            conn.commit()
-            cur.close()
-            return True, None
-
-    except _DB_ERRORS:
-        return False, MSG_NO_CONEXION
-    except psycopg2.errors.UndefinedTable:
-        return False, MSG_NO_TABLA
-    except Exception as e:
-        return False, f"Error al registrar turno: {e}"
+    fecha_str = fecha.isoformat() if fecha else None
+    hora_str = hora.isoformat() if isinstance(hora, datetime) else (hora.strftime("%H:%M") if hasattr(hora, 'strftime') else None)
+    resp = api_client.registrar_turno(
+        nombre=nombre, apellido=apellido, dni=dni,
+        obra_social=obra_social or None, motivo=motivo_consulta or None,
+        fecha=fecha_str, hora=hora_str, usuario=usuario
+    )
+    if resp.get("status") == "error":
+        detail = resp.get("detail", "")
+        if "does not exist" in detail or "no existe" in detail:
+            return False, MSG_NO_TABLA
+        return False, f"Error al registrar turno: {detail}"
+    return True, None
 
 
 def obtener_turnos_del_dia(fecha_date=None):
-    try:
-        if fecha_date is None:
-            fecha_date = date.today()
-        with connection() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                SELECT * FROM turnos
-                WHERE fecha = %s
-                ORDER BY hora ASC
-            """, (fecha_date,))
-            rows = cur.fetchall()
-            cur.close()
-            return [_row_to_dict(r) for r in rows], None
-
-    except _DB_ERRORS:
-        return [], MSG_NO_CONEXION
-    except psycopg2.errors.UndefinedTable:
-        return [], MSG_NO_TABLA
-    except Exception as e:
-        return [], f"Error al obtener turnos: {e}"
+    data, err = _check(api_client.turnos_hoy())
+    if err:
+        if "does not exist" in err or "no existe" in err:
+            return [], MSG_NO_TABLA
+        return [], err
+    turnos = []
+    for t in data:
+        turnos.append({
+            "id": t["id"],
+            "nombre": t["nombre"],
+            "apellido": t["apellido"],
+            "dni": t["dni"],
+            "obra_social": t.get("obra_social"),
+            "motivo_consulta": t.get("motivo_consulta"),
+            "fecha": date.fromisoformat(t["fecha"]) if t.get("fecha") else None,
+            "hora": datetime.fromisoformat(t["hora"]) if t.get("hora") else None,
+            "estado": t.get("estado", "pendiente"),
+            "usuario": t.get("usuario"),
+        })
+    return turnos, None
 
 
 def obtener_todos_los_turnos():
-    try:
-        with connection() as conn:
-            cur = conn.cursor()
-            cur.execute("SELECT * FROM turnos ORDER BY fecha DESC, hora DESC")
-            rows = cur.fetchall()
-            cur.close()
-            return [_row_to_dict(r) for r in rows], None
-
-    except _DB_ERRORS:
-        return [], MSG_NO_CONEXION
-    except psycopg2.errors.UndefinedTable:
-        return [], MSG_NO_TABLA
-    except Exception as e:
-        return [], f"Error al obtener turnos: {e}"
+    data, err = _check(api_client.turnos_todos())
+    if err:
+        if "does not exist" in err or "no existe" in err:
+            return [], MSG_NO_TABLA
+        return [], err
+    turnos = []
+    for t in data:
+        turnos.append({
+            "id": t["id"],
+            "nombre": t["nombre"],
+            "apellido": t["apellido"],
+            "dni": t["dni"],
+            "obra_social": t.get("obra_social"),
+            "motivo_consulta": t.get("motivo_consulta"),
+            "fecha": date.fromisoformat(t["fecha"]) if t.get("fecha") else None,
+            "hora": datetime.fromisoformat(t["hora"]) if t.get("hora") else None,
+            "estado": t.get("estado", "pendiente"),
+            "usuario": t.get("usuario"),
+        })
+    return turnos, None
 
 
 def buscar_turnos(dni=None, nombre=None, apellido=None):
-    try:
-        with connection() as conn:
-            cur = conn.cursor()
-            condiciones = []
-            parametros = []
-
-            if dni:
-                condiciones.append("dni ILIKE %s")
-                parametros.append(f"%{dni}%")
-            if nombre:
-                condiciones.append("nombre ILIKE %s")
-                parametros.append(f"%{nombre}%")
-            if apellido:
-                condiciones.append("apellido ILIKE %s")
-                parametros.append(f"%{apellido}%")
-
-            if not condiciones:
-                return [], "Debe ingresar al menos un criterio de busqueda"
-
-            where = " AND ".join(condiciones)
-            cur.execute(f"SELECT * FROM turnos WHERE {where} ORDER BY fecha DESC, hora DESC", parametros)
-            rows = cur.fetchall()
-            cur.close()
-            return [_row_to_dict(r) for r in rows], None
-
-    except _DB_ERRORS:
-        return [], MSG_NO_CONEXION
-    except psycopg2.errors.UndefinedTable:
-        return [], MSG_NO_TABLA
-    except Exception as e:
-        return [], f"Error al buscar turnos: {e}"
+    data, err = _check(api_client.buscar_turnos(dni=dni, nombre=nombre, apellido=apellido))
+    if err:
+        return [], err
+    turnos = []
+    for t in data:
+        turnos.append({
+            "id": t["id"],
+            "nombre": t["nombre"],
+            "apellido": t["apellido"],
+            "dni": t["dni"],
+            "obra_social": t.get("obra_social"),
+            "motivo_consulta": t.get("motivo_consulta"),
+            "fecha": date.fromisoformat(t["fecha"]) if t.get("fecha") else None,
+            "hora": datetime.fromisoformat(t["hora"]) if t.get("hora") else None,
+            "estado": t.get("estado", "pendiente"),
+            "usuario": t.get("usuario"),
+        })
+    return turnos, None
 
 
 def eliminar_turno(turno_id):
-    try:
-        with connection() as conn:
-            cur = conn.cursor()
-            cur.execute("DELETE FROM turnos WHERE id = %s", (turno_id,))
-            conn.commit()
-            cur.close()
-            return True, None
-
-    except _DB_ERRORS:
-        return False, MSG_NO_CONEXION
-    except psycopg2.errors.UndefinedTable:
-        return False, MSG_NO_TABLA
-    except Exception as e:
-        return False, f"Error al eliminar turno: {e}"
+    resp = api_client.eliminar_turno(turno_id)
+    if resp.get("status") == "error":
+        return False, f"Error al eliminar turno: {resp.get('detail', '')}"
+    return True, None
 
 
 def editar_turno(turno_id, nombre, apellido, dni, obra_social, motivo_consulta, fecha, hora):
-    try:
-        with connection() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                UPDATE turnos
-                SET nombre = %s, apellido = %s, dni = %s, obra_social = %s,
-                    motivo_consulta = %s, fecha = %s, hora = %s
-                WHERE id = %s
-            """, (nombre, apellido, dni, obra_social, motivo_consulta, fecha, hora, turno_id))
-            conn.commit()
-            cur.close()
-            return True, None
-
-    except _DB_ERRORS:
-        return False, MSG_NO_CONEXION
-    except psycopg2.errors.UndefinedTable:
-        return False, MSG_NO_TABLA
-    except Exception as e:
-        return False, f"Error al editar turno: {e}"
+    fecha_str = fecha.isoformat() if fecha else None
+    hora_str = hora.isoformat() if isinstance(hora, datetime) else None
+    resp = api_client.editar_turno(
+        turno_id=turno_id, nombre=nombre, apellido=apellido, dni=dni,
+        obra_social=obra_social or None, motivo=motivo_consulta or None,
+        fecha=fecha_str, hora=hora_str
+    )
+    if resp.get("status") == "error":
+        return False, f"Error al editar turno: {resp.get('detail', '')}"
+    return True, None
 
 
 def reprogramar_turno(turno_id, nueva_fecha, nueva_hora):
-    try:
-        with connection() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                UPDATE turnos
-                SET fecha = %s, hora = %s, estado = 'pendiente'
-                WHERE id = %s
-            """, (nueva_fecha, nueva_hora, turno_id))
-            conn.commit()
-            cur.close()
-            return True, None
-
-    except _DB_ERRORS:
-        return False, MSG_NO_CONEXION
-    except psycopg2.errors.UndefinedTable:
-        return False, MSG_NO_TABLA
-    except Exception as e:
-        return False, f"Error al reprogramar turno: {e}"
+    fecha_str = nueva_fecha.isoformat() if nueva_fecha else None
+    hora_str = nueva_hora.isoformat() if isinstance(nueva_hora, datetime) else None
+    resp = api_client.reprogramar_turno(turno_id=turno_id, fecha=fecha_str, hora=hora_str)
+    if resp.get("status") == "error":
+        return False, f"Error al reprogramar turno: {resp.get('detail', '')}"
+    return True, None
 
 
 def avanzar_turno(turno_id):
-    try:
-        with connection() as conn:
-            cur = conn.cursor()
-            cur.execute("""
-                UPDATE turnos SET estado = 'atendido'
-                WHERE id = %s
-            """, (turno_id,))
-            conn.commit()
-            cur.close()
-            return True, None
-
-    except _DB_ERRORS:
-        return False, MSG_NO_CONEXION
-    except psycopg2.errors.UndefinedTable:
-        return False, MSG_NO_TABLA
-    except Exception as e:
-        return False, f"Error al avanzar turno: {e}"
+    resp = api_client.avanzar_turno(turno_id)
+    if resp.get("status") == "error":
+        return False, f"Error al avanzar turno: {resp.get('detail', '')}"
+    return True, None
 
 
 def registrar_cambio(tabla, registro_id, accion, detalle, usuario=None, dni=None, nombre=None, apellido=None):
-    try:
-        with connection() as conn:
-            cur = conn.cursor()
-            try:
-                cur.execute("""
-                    INSERT INTO historial_cambios (tabla, registro_id, accion, detalle, usuario, dni, nombre, apellido)
-                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-                """, (tabla, registro_id, accion, detalle, usuario, dni, nombre, apellido))
-            except psycopg2.errors.UndefinedColumn:
-                conn.rollback()
-                cur.execute("""
-                    INSERT INTO historial_cambios (tabla, registro_id, accion, detalle, usuario)
-                    VALUES (%s, %s, %s, %s, %s)
-                """, (tabla, registro_id, accion, detalle, usuario))
-            conn.commit()
-            cur.close()
-            return True, None
-    except _DB_ERRORS:
-        return False, MSG_NO_CONEXION
-    except Exception as e:
-        return False, f"Error al registrar cambio: {e}"
+    resp = api_client.registrar_historial(
+        tabla=tabla, registro_id=registro_id, accion=accion,
+        detalle=detalle, usuario=usuario, dni=dni, nombre=nombre, apellido=apellido
+    )
+    if resp.get("status") == "error":
+        return False, f"Error al registrar cambio: {resp.get('detail', '')}"
+    return True, None
 
 
 def obtener_historial():
-    try:
-        with connection() as conn:
-            cur = conn.cursor()
-            try:
-                cur.execute("""
-                    SELECT id, tabla, registro_id, accion, detalle, usuario, dni, nombre, apellido, fecha
-                    FROM historial_cambios
-                    ORDER BY fecha DESC
-                    LIMIT 200
-                """)
-            except psycopg2.errors.UndefinedColumn:
-                conn.rollback()
-                cur.execute("""
-                    SELECT id, tabla, registro_id, accion, detalle,
-                           NULL as usuario, NULL as dni, NULL as nombre, NULL as apellido, fecha
-                    FROM historial_cambios
-                    ORDER BY fecha DESC
-                    LIMIT 200
-                """)
-            registros = cur.fetchall()
-            cur.close()
-            return [_row_to_dict_historial(r) for r in registros], None
-    except _DB_ERRORS:
-        return [], MSG_NO_CONEXION
-    except psycopg2.errors.UndefinedTable:
-        return [], MSG_NO_TABLA
-    except Exception as e:
-        return [], f"Error al obtener historial: {e}"
-
-
-def _row_to_dict_historial(row):
-    if not row:
-        return None
-    return {
-        "id": row[0],
-        "tabla": row[1],
-        "registro_id": row[2],
-        "accion": row[3],
-        "detalle": row[4],
-        "usuario": row[5],
-        "dni": row[6],
-        "nombre": row[7],
-        "apellido": row[8],
-        "fecha": row[9],
-    }
+    data, err = _check(api_client.historial())
+    if err:
+        if "does not exist" in err or "no existe" in err:
+            return [], MSG_NO_TABLA
+        return [], err
+    registros = []
+    for r in data:
+        registros.append({
+            "id": r["id"],
+            "tabla": r.get("tabla"),
+            "registro_id": r.get("registro_id"),
+            "accion": r["accion"],
+            "detalle": r.get("detalle"),
+            "usuario": r.get("usuario"),
+            "dni": r.get("dni"),
+            "nombre": r.get("nombre"),
+            "apellido": r.get("apellido"),
+            "fecha": datetime.fromisoformat(r["fecha"]) if r.get("fecha") else None,
+            "motivo_consulta": r.get("motivo_consulta"),
+        })
+    return registros, None

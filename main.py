@@ -2,7 +2,6 @@ import sys
 import ctypes
 import os
 import configparser
-import psycopg2
 from datetime import date, datetime
 from PyQt6.QtWidgets import (
     QApplication, QTabWidget, QWidget, QVBoxLayout, QHBoxLayout,
@@ -29,6 +28,7 @@ from app.turno_manager import (
 )
 
 
+from app import api_client
 from app.license_validator import (
     validate_serial,
     save_license,
@@ -114,18 +114,18 @@ class LoginWindow(QWidget):
         self.load_config()
 
     def init_ui(self):
-        self.setWindowTitle("Configuracion de la base de datos")
-        self.setGeometry(100, 100, 400, 320)
+        self.setWindowTitle("Configuracion del servidor")
+        self.setGeometry(100, 100, 420, 400)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(20, 20, 20, 20)
 
+        self.entry_server_ip = self.create_input(layout, "IP del servidor:", "localhost")
+        self.entry_server_port = self.create_input(layout, "Puerto del servidor:", "8080")
         self.entry_db_name = self.create_input(layout, "Nombre de la base de datos:", "hardagenda_db")
-        self.entry_db_host = self.create_input(layout, "Host de la base de datos:", "localhost")
-        self.entry_db_port = self.create_input(layout, "Puerto de la base de datos:", "5432")
-        self.entry_db_user = self.create_input(layout, "Usuario de la base de datos:")
+        self.entry_db_user = self.create_input(layout, "Usuario de PostgreSQL:")
         self.entry_db_password = self.create_input(
-            layout, "Contrasena de la base de datos:", echo_mode=QLineEdit.EchoMode.Password
+            layout, "Contrasena de PostgreSQL:", echo_mode=QLineEdit.EchoMode.Password
         )
 
         self.check_save_credentials = QCheckBox("Guardar datos de inicio de sesion")
@@ -158,9 +158,13 @@ class LoginWindow(QWidget):
             config = configparser.ConfigParser()
             config.read(CONFIG_PATH, encoding='utf-8')
             if config.has_section('database'):
+                saved_ip = config.get('database', 'server_ip', fallback='')
+                saved_port = config.get('database', 'server_port', fallback='')
+                if saved_ip:
+                    self.entry_server_ip.setText(saved_ip)
+                if saved_port:
+                    self.entry_server_port.setText(saved_port)
                 self.entry_db_name.setText(config.get('database', 'database', fallback='hardagenda_db'))
-                self.entry_db_host.setText(config.get('database', 'host', fallback='localhost'))
-                self.entry_db_port.setText(config.get('database', 'port', fallback='5432'))
                 saved_user = config.get('database', 'user', fallback='')
                 saved_pass = config.get('database', 'password', fallback='')
                 if saved_user:
@@ -168,54 +172,61 @@ class LoginWindow(QWidget):
                     self.entry_db_password.setText(saved_pass)
                     self.check_save_credentials.setChecked(True)
 
-    def verificar_conexion(self, db_host, db_port, db_user, db_password):
-        try:
-            conn = psycopg2.connect(
-                host=db_host, port=db_port, user=db_user,
-                password=db_password, dbname="postgres"
-            )
-            conn.close()
-            return True
-        except (psycopg2.OperationalError, UnicodeDecodeError, psycopg2.InterfaceError):
-            QMessageBox.warning(self, "Error de conexion",
-                                "Usuario o contrasena incorrectos o la base de datos no esta disponible.")
-            return False
-
     def login(self):
-        db_name = self.entry_db_name.text()
-        db_user = self.entry_db_user.text()
-        db_password = self.entry_db_password.text()
-        db_host = self.entry_db_host.text()
-        db_port = self.entry_db_port.text()
+        server_ip = self.entry_server_ip.text().strip()
+        server_port = self.entry_server_port.text().strip()
+        db_name = self.entry_db_name.text().strip()
+        db_user = self.entry_db_user.text().strip()
+        db_password = self.entry_db_password.text().strip()
 
-        if not self.verificar_conexion(db_host, db_port, db_user, db_password):
+        if not server_ip:
+            QMessageBox.warning(self, "Error", "Ingrese la IP del servidor")
+            return
+
+        server_url = f"http://{server_ip}:{server_port}"
+
+        api_client.configure(server_url, db_name, db_user, db_password)
+
+        resp = api_client.ping()
+        if resp.get("status") != "ok":
+            QMessageBox.warning(self, "Error de conexion",
+                                "No se pudo conectar al servidor.\nVerifique que el servidor FastAPI este corriendo.")
             return
 
         if self.check_create_db.isChecked():
             try:
                 crear_base_de_datos()
                 crear_tablas()
-                QMessageBox.information(self, "Base de datos", "Base de datos y tablas creadas/verificadas")
             except Exception as e:
                 QMessageBox.warning(self, "Error al crear la base de datos", str(e))
+                return
 
-        config = configparser.ConfigParser()
-        config['database'] = {
-            'database': db_name,
-            'user': db_user,
-            'password': db_password,
-            'host': db_host,
-            'port': db_port
-        }
-        with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
-            config.write(f)
+        resp = api_client.test_connection()
+        if resp.get("status") == "error":
+            detail = resp.get("detail", "Error desconocido")
+            QMessageBox.warning(self, "Error de conexion", detail)
+            return
+
+        if self.check_save_credentials.isChecked():
+            config = configparser.ConfigParser()
+            config['database'] = {
+                'server_ip': server_ip,
+                'server_port': server_port,
+                'database': db_name,
+                'user': db_user,
+                'password': db_password,
+                'host': 'localhost',
+                'port': '5432'
+            }
+            with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+                config.write(f)
 
         self.close()
         self.main_window = TurneroApp()
         self.main_window.container.show()
 
 
-HIGHLIGHT_STYLE = "background-color: #1b3a20; font-weight: bold; border-left: 4px solid #28a745; color: #e0e0e0;"
+HIGHLIGHT_STYLE = "background-color: #3a3a3a; font-weight: bold; border-left: 4px solid #9e9e9e; color: #e0e0e0;"
 NORMAL_STYLE = ""
 
 
@@ -424,7 +435,7 @@ class TurneroApp(QTabWidget):
             item = QListWidgetItem(texto)
             item.setData(Qt.ItemDataRole.UserRole, t['id'])
             if idx == 0:
-                item.setBackground(QBrush(QColor("#1b3a20")))
+                item.setBackground(QBrush(QColor("#3a3a3a")))
                 item.setForeground(QBrush(QColor("#e0e0e0")))
                 item.setFont(QFont("Open Sans", 11, QFont.Weight.Bold))
                 item.setToolTip("TURNO ACTUAL")
@@ -1008,7 +1019,7 @@ class TurneroApp(QTabWidget):
         self.tabla_historial = QTableWidget()
         self.tabla_historial.setColumnCount(6)
         self.tabla_historial.setHorizontalHeaderLabels(
-            ["Fecha", "Accion", "Detalle", "DNI", "Nombre", "Usuario"]
+            ["Fecha", "Accion", "Consulta", "DNI", "Nombre", "Usuario"]
         )
         self.tabla_historial.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
         self.tabla_historial.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -1048,7 +1059,7 @@ class TurneroApp(QTabWidget):
             nombre_completo = f"{r['nombre'] or ''} {r['apellido'] or ''}".strip()
             self.tabla_historial.setItem(i, 0, QTableWidgetItem(fecha_str))
             self.tabla_historial.setItem(i, 1, QTableWidgetItem(r['accion']))
-            self.tabla_historial.setItem(i, 2, QTableWidgetItem(r.get('detalle') or ""))
+            self.tabla_historial.setItem(i, 2, QTableWidgetItem(r.get('motivo_consulta') or ""))
             self.tabla_historial.setItem(i, 3, QTableWidgetItem(r['dni'] or ""))
             self.tabla_historial.setItem(i, 4, QTableWidgetItem(nombre_completo))
             self.tabla_historial.setItem(i, 5, QTableWidgetItem(r['usuario'] or ""))
@@ -1068,7 +1079,7 @@ class TurneroApp(QTabWidget):
         lbl_titulo.setFont(QFont("Open Sans", 18, QFont.Weight.Bold))
         layout.addWidget(lbl_titulo)
 
-        lbl_version = QLabel("Version 1.0.0")
+        lbl_version = QLabel("Version 1.1.0")
         lbl_version.setFont(QFont("Open Sans", 11))
         lbl_version.setStyleSheet("color: #6b7280;")
         layout.addWidget(lbl_version)
@@ -1097,7 +1108,7 @@ class TurneroApp(QTabWidget):
         layout.addWidget(lbl_email_titulo)
 
         link_email = QLabel(
-            "<a href='mailto:abelgodoy.1802@gmail.com?subject=REPORTE%20-%20HardAgenda%20V1.0.0' "
+            "<a href='mailto:abelgodoy.1802@gmail.com?subject=REPORTE%20-%20HardAgenda%20V1.1.0' "
             "style='color: #64b5f6;'>abelgodoy.1802@gmail.com</a>"
         )
         link_email.setFont(QFont("Open Sans", 11))
@@ -1115,7 +1126,7 @@ class TurneroApp(QTabWidget):
         layout.addWidget(lbl_soporte_titulo)
 
         reporte_body = (
-            "REPORTAR PROBLEMA - HardAgenda V1.0.0%0A%0A"
+            "REPORTAR PROBLEMA - HardAgenda V1.1.0%0A%0A"
             "--- Descripcion del problema ---%0A"
             "(Describe que hiciste y que esperabas que pasara)%0A%0A"
             "--- Pasos para reproducir ---%0A"
@@ -1134,7 +1145,7 @@ class TurneroApp(QTabWidget):
             "PostgreSQL: %0A"
         )
         link_reportar = QLabel(
-            f"<a href='mailto:abelgodoy.1802@gmail.com?subject=REPORTE%20-%20HardAgenda%20V1.0.0&body={reporte_body}' "
+            f"<a href='mailto:abelgodoy.1802@gmail.com?subject=REPORTE%20-%20HardAgenda%20V1.1.0&body={reporte_body}' "
             f"style='color: #64b5f6;'>Reportar un problema</a>"
         )
         link_reportar.setFont(QFont("Open Sans", 11))
@@ -1171,12 +1182,12 @@ if __name__ == "__main__":
             background-color: #242424; color: #e0e0e0; border: 1px solid #2e2e2e;
             border-radius: 4px; padding: 4px;
         }
-        QLineEdit:focus, QTimeEdit:focus, QDateEdit:focus { border: 1px solid #28a745; }
+        QLineEdit:focus, QTimeEdit:focus, QDateEdit:focus { border: 1px solid #9e9e9e; }
         QTableWidget {
             background-color: #242424; color: #e0e0e0; gridline-color: #2e2e2e;
             border: 1px solid #2e2e2e; border-radius: 4px;
         }
-        QTableWidget::item:selected { background-color: #1b3a20; color: #e0e0e0; }
+        QTableWidget::item:selected { background-color: #3a3a3a; color: #e0e0e0; }
         QHeaderView::section {
             background-color: #2e2e2e; color: #e0e0e0; border: 1px solid #1a1a1a;
             padding: 4px; font-weight: bold;
@@ -1185,30 +1196,31 @@ if __name__ == "__main__":
             background-color: #242424; color: #e0e0e0; border: 1px solid #2e2e2e;
             border-radius: 4px;
         }
-        QListWidget::item:selected { background-color: #1b3a20; color: #e0e0e0; }
+        QListWidget::item:selected { background-color: #3a3a3a; color: #e0e0e0; }
         QPushButton {
-            background-color: #28a745; color: #000000; border: none;
+            background-color: #9e9e9e; color: #1a1a1a; border: none;
             border-radius: 4px; padding: 6px 16px; font-weight: bold;
         }
-        QPushButton:hover { background-color: #4CAF50; }
-        QPushButton:pressed { background-color: #155724; }
+        QPushButton:hover { background-color: #bdbdbd; }
+        QPushButton:pressed { background-color: #757575; }
         QTabWidget::pane { border: none; }
         QTabBar::tab {
             background-color: #242424; color: #6b7280; padding: 8px 16px;
             border: none; border-bottom: 2px solid transparent;
         }
-        QTabBar::tab:selected { color: #28a745; border-bottom: 2px solid #28a745; }
+        QTabBar::tab:selected { color: #e0e0e0; border-bottom: 2px solid #9e9e9e; }
         QTabBar::tab:hover { color: #e0e0e0; }
         QCheckBox { color: #e0e0e0; spacing: 6px; }
         QCheckBox::indicator {
             width: 16px; height: 16px; border-radius: 3px;
             border: 1px solid #6b7280; background-color: #242424;
         }
-        QCheckBox::indicator:checked { background-color: #28a745; border-color: #28a745; }
+        QCheckBox::indicator:checked { background-color: #9e9e9e; border-color: #9e9e9e; }
         QMenu { background-color: #242424; color: #e0e0e0; border: 1px solid #2e2e2e; }
-        QMenu::item:selected { background-color: #1b3a20; }
+        QMenu::item { padding: 4px 16px; }
+        QMenu::item:selected { background-color: #3a3a3a; }
         QMessageBox { background-color: #1a1a1a; }
-        QToolTip { background-color: #2e2e2e; color: #e0e0e0; border: 1px solid #28a745; }
+        QToolTip { background-color: #2e2e2e; color: #e0e0e0; border: 1px solid #9e9e9e; }
     """)
     icon_path = os.path.join(INTERNAL_PATH, 'resources', 'logo_small.png')
     if not os.path.exists(icon_path):

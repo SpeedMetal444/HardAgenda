@@ -1,11 +1,11 @@
 [Setup]
 AppName=HardAgenda
-AppVersion=1.0.0
+AppVersion=1.1.0
 AppPublisher=Abel Godoy
 DefaultDirName={autopf}\HardAgenda
 DefaultGroupName=HardAgenda
 OutputDir=installer_output
-OutputBaseFilename=HardAgenda_Setup_V1.0.0
+OutputBaseFilename=HardAgenda_Setup_V1.1.0
 SetupIconFile=resources\HardAgenda.ico
 UninstallDisplayIcon={app}\HardAgenda.exe
 Compression=lzma2
