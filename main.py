@@ -1011,14 +1011,6 @@ class TurneroApp(QTabWidget):
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
-        logo_path = os.path.join(BASE_PATH, 'resources', 'logo_small.png')
-        if os.path.exists(logo_path):
-            lbl_logo = QLabel()
-            lbl_logo.setPixmap(QIcon(logo_path).pixmap(120, 120))
-            lbl_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            layout.addWidget(lbl_logo)
-            layout.addSpacing(10)
-
         lbl_titulo = QLabel("HardAgenda")
         lbl_titulo.setFont(QFont("Open Sans", 18, QFont.Weight.Bold))
         lbl_titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -1098,6 +1090,15 @@ class TurneroApp(QTabWidget):
         layout.addWidget(link_reportar)
 
         layout.addStretch()
+
+        logo_row = QHBoxLayout()
+        logo_row.addStretch()
+        logo_path = os.path.join(BASE_PATH, 'resources', 'logo_small.png')
+        if os.path.exists(logo_path):
+            lbl_logo = QLabel()
+            lbl_logo.setPixmap(QIcon(logo_path).pixmap(80, 80))
+            logo_row.addWidget(lbl_logo)
+        layout.addLayout(logo_row)
 
         self.tab_acerca.setLayout(layout)
 
