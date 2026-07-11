@@ -94,14 +94,20 @@ def _row_to_dict(row):
     }
 
 
-def agregar_turno(nombre, apellido, dni, obra_social, motivo_consulta, usuario=None):
+def agregar_turno(nombre, apellido, dni, obra_social, motivo_consulta, usuario=None, fecha=None, hora=None):
     try:
         with connection() as conn:
             cur = conn.cursor()
-            cur.execute("""
-                INSERT INTO turnos (nombre, apellido, dni, obra_social, motivo_consulta, usuario)
-                VALUES (%s, %s, %s, %s, %s, %s);
-            """, (nombre, apellido, dni, obra_social, motivo_consulta, usuario))
+            if fecha and hora:
+                cur.execute("""
+                    INSERT INTO turnos (nombre, apellido, dni, obra_social, motivo_consulta, fecha, hora, usuario)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s);
+                """, (nombre, apellido, dni, obra_social, motivo_consulta, fecha, hora, usuario))
+            else:
+                cur.execute("""
+                    INSERT INTO turnos (nombre, apellido, dni, obra_social, motivo_consulta, usuario)
+                    VALUES (%s, %s, %s, %s, %s, %s);
+                """, (nombre, apellido, dni, obra_social, motivo_consulta, usuario))
             conn.commit()
             cur.close()
             return True, None

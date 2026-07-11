@@ -9,9 +9,9 @@ from PyQt6.QtWidgets import (
     QLabel, QLineEdit, QPushButton, QTextEdit, QCheckBox, QMessageBox,
     QListWidget, QListWidgetItem, QTableWidget, QTableWidgetItem,
     QHeaderView, QAbstractItemView, QMenu, QFileDialog, QStatusBar,
-    QFrame, QSplitter
+    QFrame, QSplitter, QDateTimeEdit
 )
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, QDateTime
 from PyQt6.QtGui import QFont, QIcon, QAction, QKeySequence, QShortcut, QColor, QBrush
 from app.turno_manager import (
     agregar_turno,
@@ -371,6 +371,7 @@ class TurneroApp(QTabWidget):
             item.setData(Qt.ItemDataRole.UserRole, t['id'])
             if idx == 0:
                 item.setBackground(QBrush(QColor("#d4edda")))
+                item.setForeground(QBrush(QColor("#155724")))
                 item.setFont(QFont("Open Sans", 11, QFont.Weight.Bold))
                 item.setToolTip("TURNO ACTUAL")
             self.lista_hoy.addItem(item)
@@ -455,6 +456,14 @@ class TurneroApp(QTabWidget):
         self.entry_motivo.setFixedHeight(30)
         self.entry_motivo.setPlaceholderText("Ingrese motivo de consulta")
 
+        label_fecha = QLabel("Fecha y hora del turno:")
+        label_fecha.setFont(QFont("Open Sans", 12))
+        self.entry_fecha_hora = QDateTimeEdit()
+        self.entry_fecha_hora.setFixedHeight(30)
+        self.entry_fecha_hora.setDateTime(QDateTime.currentDateTime())
+        self.entry_fecha_hora.setDisplayFormat("dd/MM/yyyy HH:mm")
+        self.entry_fecha_hora.setCalendarPopup(True)
+
         button_registrar = QPushButton("Registrar turno")
         button_registrar.setFixedHeight(35)
         button_registrar.clicked.connect(self.registrar_turno)
@@ -469,6 +478,8 @@ class TurneroApp(QTabWidget):
         layout.addWidget(self.entry_obra_social)
         layout.addWidget(label_motivo)
         layout.addWidget(self.entry_motivo)
+        layout.addWidget(label_fecha)
+        layout.addWidget(self.entry_fecha_hora)
         layout.addSpacing(10)
         layout.addWidget(button_registrar)
 
@@ -480,16 +491,18 @@ class TurneroApp(QTabWidget):
         dni = self.entry_dni.text().strip()
         obra_social = self.entry_obra_social.text().strip()
         motivo = self.entry_motivo.text().strip()
+        fecha_hora = self.entry_fecha_hora.dateTime().toPyDateTime()
 
         if not (nombre and apellido and dni):
             QMessageBox.warning(self, "Error", "Nombre, apellido y DNI son obligatorios")
             return
 
         usuario = self._usuario_actual()
-        exito, error = agregar_turno(nombre, apellido, dni, obra_social, motivo, usuario)
+        exito, error = agregar_turno(nombre, apellido, dni, obra_social, motivo, usuario,
+                                     fecha=fecha_hora.date(), hora=fecha_hora)
         if exito:
             registrar_cambio("turnos", None, "ALTA TURNO",
-                             f"{nombre} {apellido} (DNI: {dni})",
+                             f"{nombre} {apellido} (DNI: {dni}) - {fecha_hora.strftime('%d/%m/%Y %H:%M')}",
                              usuario=usuario,
                              dni=dni, nombre=nombre, apellido=apellido)
             QMessageBox.information(self, "Registrado", "Turno registrado con exito")
@@ -498,6 +511,7 @@ class TurneroApp(QTabWidget):
             self.entry_dni.clear()
             self.entry_obra_social.clear()
             self.entry_motivo.clear()
+            self.entry_fecha_hora.setDateTime(QDateTime.currentDateTime())
             self._refrescar_hoy()
         else:
             if "no existe la tabla" in error.lower() or "does not exist" in error.lower():
