@@ -31,29 +31,23 @@ Filename: "{app}\HardAgenda.exe"; Description: "Iniciar HardAgenda"; Flags: nowa
 
 [Code]
 var
-  SerialEdit: TNewEdit;
-  SerialLabel: TNewStaticText;
-  HWLabel: TNewStaticText;
-  Page: TSetupWizardPage;
+  SerialPage: TInputQueryWizardPage;
+
+const
+  MASTER_SERIAL = 'HARD-MAST-ERK2026';
 
 function GenerateHWFingerprint(): String;
 var
   ResultCode: Integer;
-  TempFile, Output, Line: String;
+  TempFile, Line, CPUID, DiskSN: String;
   SL: TStringList;
-  CPUID, DiskSN: String;
-  FSO: OleVariant;
-  WMI: OleVariant;
-  Items: OleVariant;
   i: Integer;
 begin
   CPUID := '';
   DiskSN := '';
-
   TempFile := ExpandConstant('{tmp}\hwinfo.txt');
-  Exec('wmic', 'cpu get ProcessorId /format:list', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-  Exec('cmd', '/c wmic cpu get ProcessorId > "' + TempFile + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
 
+  Exec('cmd', '/c wmic cpu get ProcessorId > "' + TempFile + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
   SL := TStringList.Create;
   try
     if FileExists(TempFile) then
@@ -62,11 +56,10 @@ begin
       for i := 0 to SL.Count - 1 do
       begin
         Line := Trim(SL[i]);
-        if (Pos('ProcessorId', Line) > 0) and (Length(Line) > 15) then
+        if (Pos('ProcessorId', Line) > 0) and (Pos('=', Line) > 0) then
         begin
-          CPUID := Copy(Line, Pos('=', Line) + 1, Length(Line));
-          CPUID := Trim(CPUID);
-          Break;
+          CPUID := Trim(Copy(Line, Pos('=', Line) + 1, Length(Line)));
+          if CPUID <> '' then Break;
         end;
       end;
     end;
@@ -75,7 +68,6 @@ begin
   end;
 
   Exec('cmd', '/c wmic diskdrive get SerialNumber > "' + TempFile + '"', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-
   SL := TStringList.Create;
   try
     if FileExists(TempFile) then
@@ -84,10 +76,9 @@ begin
       for i := 0 to SL.Count - 1 do
       begin
         Line := Trim(SL[i]);
-        if (Pos('SerialNumber', Line) > 0) and (Length(Line) > 3) then
+        if (Pos('SerialNumber', Line) > 0) and (Pos('=', Line) > 0) then
         begin
-          DiskSN := Copy(Line, Pos('=', Line) + 1, Length(Line));
-          DiskSN := Trim(DiskSN);
+          DiskSN := Trim(Copy(Line, Pos('=', Line) + 1, Length(Line)));
           if DiskSN <> '' then Break;
         end;
       end;
@@ -98,94 +89,52 @@ begin
 
   if CPUID = '' then CPUID := 'DEFAULT';
   if DiskSN = '' then DiskSN := 'DEFAULT';
-
   Result := CPUID + '-' + DiskSN;
 end;
 
-function IsSerialValid(Serial, HWFingerprint: String): Boolean;
-var
-  MasterSerial: String;
+function IsSerialValid(Serial: String): Boolean;
 begin
   Result := False;
-
-  MasterSerial := GetStringConstant('MasterSerial');
-  if Serial = MasterSerial then
+  if Serial = MASTER_SERIAL then
   begin
     Result := True;
     Exit;
   end;
-
-  if Length(Serial) = 19 then
+  if Length(Serial) = 14 then
   begin
-    if (Serial[5] = '-') and (Serial[10] = '-') and (Serial[15] = '-') then
-    begin
+    if (Serial[5] = '-') and (Serial[10] = '-') then
       Result := True;
-    end;
   end;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
 var
-  Serial, HW: String;
+  Serial: String;
 begin
   Result := True;
-
-  if CurPageID = wpSelectDir then
+  if CurPageID = SerialPage.ID then
   begin
-    Serial := SerialEdit.Text;
-    HW := GenerateHWFingerprint();
-
+    Serial := SerialPage.Values[0];
     if Trim(Serial) = '' then
     begin
       MsgBox('Debe ingresar un serial de activacion.', mbError, MB_OK);
       Result := False;
       Exit;
     end;
-
-    if not IsSerialValid(Serial, HW) then
+    if not IsSerialValid(Serial) then
     begin
-      MsgBox('El serial ingresado no es valido. Verifique el serial e intente de nuevo.' + #13#10 + #13#10 + 'ID de PC: ' + HW, mbError, MB_OK);
+      MsgBox('El serial ingresado no es valido.' + #13#10 + #13#10 + 'ID de PC: ' + GenerateHWFingerprint(), mbError, MB_OK);
       Result := False;
       Exit;
     end;
   end;
 end;
 
-procedure CreateCustomPage;
-begin
-  Page := CreateCustomPage(wpSelectDir, 'Activacion', 'Ingrese su serial de activacion para continuar.');
-
-  SerialLabel := TNewStaticText.Create(Page);
-  SerialLabel.Top := 10;
-  SerialLabel.Left := 0;
-  SerialLabel.Width := Page.SurfaceWidth;
-  SerialLabel.AutoSize := True;
-  SerialLabel.Caption := 'Serial de activacion:';
-  Page.AddControl(SerialLabel);
-
-  SerialEdit := TNewEdit.Create(Page);
-  SerialEdit.Top := SerialLabel.Top + SerialLabel.Height + 5;
-  SerialEdit.Left := 0;
-  SerialEdit.Width := 250;
-  SerialEdit.Height := 25;
-  SerialEdit.MaxLength := 19;
-  SerialEdit.Text := '';
-  Page.AddControl(SerialEdit);
-
-  HWLabel := TNewStaticText.Create(Page);
-  HWLabel.Top := SerialEdit.Top + SerialEdit.Height + 15;
-  HWLabel.Left := 0;
-  HWLabel.Width := Page.SurfaceWidth;
-  HWLabel.AutoSize := True;
-  HWLabel.Caption := 'ID de PC: ' + GenerateHWFingerprint();
-  HWLabel.Font.Color := clGray;
-  Page.AddControl(HWLabel);
-end;
-
 procedure InitializeWizard;
+var
+  HW: String;
 begin
-  CreateCustomPage;
+  HW := GenerateHWFingerprint();
+  SerialPage := CreateInputQueryPage(wpSelectDir, 'Activacion', 'Ingrese su serial de activacion para continuar.' + #13#10 + #13#10 + 'ID de PC: ' + HW, 'Serial:');
+  SerialPage.Add('Serial de activacion:', False);
 end;
-
-[MasterSerial]
-HARDA001-XXXX-XXXX-XXXX

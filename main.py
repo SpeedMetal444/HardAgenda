@@ -27,11 +27,7 @@ from app.turno_manager import (
     crear_base_de_datos,
     crear_tablas
 )
-from app.license_validator import (
-    validate_serial,
-    save_license,
-    is_license_valid
-)
+
 
 if getattr(sys, 'frozen', False):
     BASE_PATH = os.path.dirname(sys.executable)
@@ -46,63 +42,6 @@ os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
 if sys.platform == 'win32':
     myappid = 'com.hardagenda.turnero.v1'
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
-
-
-class LicenseWindow(QWidget):
-    def __init__(self):
-        super().__init__()
-        self.init_ui()
-
-    def init_ui(self):
-        self.setWindowTitle("HardAgenda - Activacion")
-        self.setGeometry(100, 100, 450, 200)
-
-        layout = QVBoxLayout()
-        layout.setContentsMargins(20, 20, 20, 20)
-
-        lbl_titulo = QLabel("HardAgenda - Activacion")
-        lbl_titulo.setFont(QFont("Open Sans", 16, QFont.Weight.Bold))
-        lbl_titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(lbl_titulo)
-
-        layout.addSpacing(10)
-
-        lbl_info = QLabel("Ingrese su serial de activacion para continuar:")
-        lbl_info.setFont(QFont("Open Sans", 11))
-        layout.addWidget(lbl_info)
-
-        layout.addSpacing(5)
-
-        self.entry_serial = QLineEdit()
-        self.entry_serial.setFixedHeight(30)
-        self.entry_serial.setPlaceholderText("XXXX-XXXX-XXXX")
-        self.entry_serial.setFont(QFont("Open Sans", 12))
-        layout.addWidget(self.entry_serial)
-
-        layout.addSpacing(10)
-
-        btn_activar = QPushButton("Activar")
-        btn_activar.setFixedHeight(35)
-        btn_activar.clicked.connect(self.activar)
-        layout.addWidget(btn_activar)
-
-        self.setLayout(layout)
-
-    def activar(self):
-        serial = self.entry_serial.text().strip()
-        if not serial:
-            QMessageBox.warning(self, "Error", "Ingrese un serial")
-            return
-
-        if validate_serial(serial):
-            save_license(serial)
-            QMessageBox.information(self, "Activado", "HardAgenda activado correctamente")
-            self.close()
-            self.login_window = LoginWindow()
-            self.login_window.show()
-        else:
-            QMessageBox.warning(self, "Serial invalido",
-                                "El serial ingresado no es valido o ya fue utilizado en otra PC.")
 
 
 class LoginWindow(QWidget):
@@ -1161,7 +1100,7 @@ class TurneroApp(QTabWidget):
         logo_widget = QWidget()
         logo_layout = QVBoxLayout(logo_widget)
         logo_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo_path = os.path.join(BASE_PATH, 'resources', 'logo_default_large.png')
+        logo_path = os.path.join(INTERNAL_PATH, 'resources', 'logo_default_large.png')
         if os.path.exists(logo_path):
             lbl_logo = QLabel()
             lbl_logo.setPixmap(QIcon(logo_path).pixmap(250, 250))
@@ -1177,17 +1116,13 @@ if __name__ == "__main__":
     sys.excepthook = excepcion_no_manejada
 
     app = QApplication(sys.argv)
-    icon_path = os.path.join(BASE_PATH, 'resources', 'logo_small.png')
+    icon_path = os.path.join(INTERNAL_PATH, 'resources', 'logo_small.png')
     if not os.path.exists(icon_path):
-        icon_path = os.path.join(BASE_PATH, 'resources', 'HardAgenda.ico')
+        icon_path = os.path.join(INTERNAL_PATH, 'resources', 'HardAgenda.ico')
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 
-    if is_license_valid():
-        login_window = LoginWindow()
-        login_window.show()
-    else:
-        license_window = LicenseWindow()
-        license_window.show()
+    login_window = LoginWindow()
+    login_window.show()
 
     sys.exit(app.exec())
