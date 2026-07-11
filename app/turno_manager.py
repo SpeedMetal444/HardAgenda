@@ -233,6 +233,27 @@ def editar_turno(turno_id, nombre, apellido, dni, obra_social, motivo_consulta, 
         return False, f"Error al editar turno: {e}"
 
 
+def reprogramar_turno(turno_id, nueva_fecha, nueva_hora):
+    try:
+        with connection() as conn:
+            cur = conn.cursor()
+            cur.execute("""
+                UPDATE turnos
+                SET fecha = %s, hora = %s, estado = 'pendiente'
+                WHERE id = %s
+            """, (nueva_fecha, nueva_hora, turno_id))
+            conn.commit()
+            cur.close()
+            return True, None
+
+    except _DB_ERRORS:
+        return False, MSG_NO_CONEXION
+    except psycopg2.errors.UndefinedTable:
+        return False, MSG_NO_TABLA
+    except Exception as e:
+        return False, f"Error al reprogramar turno: {e}"
+
+
 def avanzar_turno(turno_id):
     try:
         with connection() as conn:

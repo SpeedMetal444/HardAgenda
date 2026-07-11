@@ -20,6 +20,7 @@ from app.turno_manager import (
     buscar_turnos,
     eliminar_turno,
     editar_turno,
+    reprogramar_turno,
     avanzar_turno,
     registrar_cambio,
     obtener_historial,
@@ -184,11 +185,13 @@ class TurneroApp(QTabWidget):
         self.tab_nuevo = QWidget()
         self.tab_todos = QWidget()
         self.tab_historial = QWidget()
+        self.tab_acerca = QWidget()
 
         self.addTab(self.tab_hoy, "Hoy")
         self.addTab(self.tab_nuevo, "Nuevo turno")
         self.addTab(self.tab_todos, "Todos los turnos")
         self.addTab(self.tab_historial, "Historial")
+        self.addTab(self.tab_acerca, "Acerca de")
 
         self._turnos_hoy = []
 
@@ -196,6 +199,7 @@ class TurneroApp(QTabWidget):
         self.init_tab_nuevo()
         self.init_tab_todos()
         self.init_tab_historial()
+        self.init_tab_acerca()
 
         self.currentChanged.connect(self._on_tab_changed)
 
@@ -318,6 +322,8 @@ class TurneroApp(QTabWidget):
         self.lista_hoy = QListWidget()
         self.lista_hoy.setFont(QFont("Open Sans", 11))
         self.lista_hoy.setMinimumHeight(300)
+        self.lista_hoy.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.lista_hoy.customContextMenuRequested.connect(self._menu_contextual_hoy)
         layout.addWidget(self.lista_hoy)
 
         row_botones = QHBoxLayout()
@@ -420,6 +426,92 @@ class TurneroApp(QTabWidget):
             self._refrescar_hoy()
         else:
             QMessageBox.critical(self, "Error", err)
+
+    def _obtener_turno_hoy_de_item(self, item):
+        if not item:
+            return None
+        turno_id = item.data(Qt.ItemDataRole.UserRole)
+        if not turno_id:
+            return None
+        for t in self._turnos_hoy:
+            if t['id'] == turno_id:
+                return t
+        return None
+
+    def _menu_contextual_hoy(self, pos):
+        item = self.lista_hoy.itemAt(pos)
+        turno = self._obtener_turno_hoy_de_item(item)
+        if not turno or turno['estado'] != 'pendiente':
+            return
+
+        menu = QMenu(self)
+
+        action_avanzar = QAction("Atender turno", self)
+        action_avanzar.triggered.connect(self._avanzar_turno_actual)
+
+        action_reprogramar = QAction("Reprogramar a otro dia", self)
+        action_reprogramar.triggered.connect(lambda: self._reprogramar_turno_hoy(turno))
+
+        menu.addAction(action_avanzar)
+        menu.addSeparator()
+        menu.addAction(action_reprogramar)
+
+        menu.exec(self.lista_hoy.viewport().mapToGlobal(pos))
+
+    def _reprogramar_turno_hoy(self, turno):
+        ventana = QWidget(self.container, Qt.WindowType.Dialog)
+        ventana.setWindowTitle("Reprogramar turno")
+        ventana.setFixedSize(320, 220)
+
+        v_layout = QVBoxLayout()
+        v_layout.setContentsMargins(16, 16, 16, 16)
+
+        v_layout.addWidget(QLabel(f"Turno de: {turno['nombre']} {turno['apellido']}"))
+
+        label_fecha = QLabel("Nueva fecha:")
+        label_fecha.setFont(QFont("Open Sans", 11))
+        entry_fecha = QDateEdit()
+        entry_fecha.setFixedHeight(30)
+        entry_fecha.setCalendarPopup(True)
+        entry_fecha.setDisplayFormat("dd/MM/yyyy")
+        entry_fecha.setDate(QDate.currentDate().addDays(1))
+
+        label_hora = QLabel("Nueva hora:")
+        label_hora.setFont(QFont("Open Sans", 11))
+        entry_hora = QTimeEdit()
+        entry_hora.setFixedHeight(30)
+        entry_hora.setDisplayFormat("HH:mm")
+        entry_hora.setTime(QTime(9, 0))
+
+        btn_reprogramar = QPushButton("Reprogramar")
+
+        v_layout.addWidget(label_fecha)
+        v_layout.addWidget(entry_fecha)
+        v_layout.addWidget(label_hora)
+        v_layout.addWidget(entry_hora)
+        v_layout.addWidget(btn_reprogramar)
+
+        ventana.setLayout(v_layout)
+
+        def confirmar():
+            nueva_fecha = entry_fecha.date().toPyDate()
+            nueva_hora_dt = datetime.combine(nueva_fecha, entry_hora.time().toPyTime())
+            exito, err = reprogramar_turno(turno['id'], nueva_fecha, nueva_hora_dt)
+            if exito:
+                registrar_cambio("turnos", turno['id'], "Reprogramado",
+                                 f"{turno['nombre']} {turno['apellido']} (DNI: {turno['dni']}) -> {nueva_fecha.strftime('%d/%m/%Y')} {entry_hora.time().toString('HH:mm')}",
+                                 usuario=self._usuario_actual(),
+                                 dni=turno['dni'],
+                                 nombre=turno['nombre'],
+                                 apellido=turno['apellido'])
+                QMessageBox.information(ventana, "Listo", f"Turno reprogramado para el {nueva_fecha.strftime('%d/%m/%Y')} a las {entry_hora.time().toString('HH:mm')}")
+                ventana.close()
+                self._refrescar_hoy()
+            else:
+                QMessageBox.critical(ventana, "Error", err)
+
+        btn_reprogramar.clicked.connect(confirmar)
+        ventana.show()
 
     # ─── TAB NUEVO TURNO ───
 
@@ -911,6 +1003,94 @@ class TurneroApp(QTabWidget):
             self.tabla_historial.setItem(i, 3, QTableWidgetItem(r['dni'] or ""))
             self.tabla_historial.setItem(i, 4, QTableWidgetItem(nombre_completo))
             self.tabla_historial.setItem(i, 5, QTableWidgetItem(r['usuario'] or ""))
+
+    # ─── TAB ACERCA DE ───
+
+    def init_tab_acerca(self):
+        layout = QVBoxLayout()
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setAlignment(Qt.AlignmentFlag.AlignTop)
+
+        lbl_titulo = QLabel("HardAgenda")
+        lbl_titulo.setFont(QFont("Open Sans", 18, QFont.Weight.Bold))
+        layout.addWidget(lbl_titulo)
+
+        lbl_version = QLabel("Version 1.0.0")
+        lbl_version.setFont(QFont("Open Sans", 11))
+        lbl_version.setStyleSheet("color: #6b7280;")
+        layout.addWidget(lbl_version)
+
+        layout.addSpacing(15)
+
+        lbl_desc = QLabel("Sistema de gestion de turnos basado en Python y PostgreSQL.")
+        lbl_desc.setFont(QFont("Open Sans", 11))
+        lbl_desc.setWordWrap(True)
+        layout.addWidget(lbl_desc)
+
+        layout.addSpacing(20)
+
+        lbl_desarrollador = QLabel("Desarrollado por:")
+        lbl_desarrollador.setFont(QFont("Open Sans", 11, QFont.Weight.Bold))
+        layout.addWidget(lbl_desarrollador)
+
+        lbl_nombre = QLabel("Abel Godoy")
+        lbl_nombre.setFont(QFont("Open Sans", 11))
+        layout.addWidget(lbl_nombre)
+
+        layout.addSpacing(10)
+
+        lbl_email_titulo = QLabel("Contacto:")
+        lbl_email_titulo.setFont(QFont("Open Sans", 11, QFont.Weight.Bold))
+        layout.addWidget(lbl_email_titulo)
+
+        link_email = QLabel(
+            "<a href='mailto:abelgodoy.1802@gmail.com?subject=REPORTE%20-%20HardAgenda%20V1.0.0' "
+            "style='color: #0078d4;'>abelgodoy.1802@gmail.com</a>"
+        )
+        link_email.setFont(QFont("Open Sans", 11))
+        link_email.setOpenExternalLinks(True)
+        layout.addWidget(link_email)
+
+        lbl_telefono = QLabel("+54 3795 320959")
+        lbl_telefono.setFont(QFont("Open Sans", 11))
+        layout.addWidget(lbl_telefono)
+
+        layout.addSpacing(20)
+
+        lbl_soporte_titulo = QLabel("Soporte:")
+        lbl_soporte_titulo.setFont(QFont("Open Sans", 11, QFont.Weight.Bold))
+        layout.addWidget(lbl_soporte_titulo)
+
+        reporte_body = (
+            "REPORTAR PROBLEMA - HardAgenda V1.0.0%0A%0A"
+            "--- Descripcion del problema ---%0A"
+            "(Describe que hiciste y que esperabas que pasara)%0A%0A"
+            "--- Pasos para reproducir ---%0A"
+            "1. %0A"
+            "2. %0A"
+            "3. %0A%0A"
+            "--- Comportamiento esperado ---%0A"
+            "%0A"
+            "--- Comportamiento actual ---%0A"
+            "%0A"
+            "--- Captura de pantalla (opcional) ---%0A"
+            "%0A"
+            "--- Datos del sistema ---%0A"
+            "SO: %0A"
+            "Python: %0A"
+            "PostgreSQL: %0A"
+        )
+        link_reportar = QLabel(
+            f"<a href='mailto:abelgodoy.1802@gmail.com?subject=REPORTE%20-%20HardAgenda%20V1.0.0&body={reporte_body}' "
+            f"style='color: #0078d4;'>Reportar un problema</a>"
+        )
+        link_reportar.setFont(QFont("Open Sans", 11))
+        link_reportar.setOpenExternalLinks(True)
+        layout.addWidget(link_reportar)
+
+        layout.addStretch()
+
+        self.tab_acerca.setLayout(layout)
 
 
 if __name__ == "__main__":
