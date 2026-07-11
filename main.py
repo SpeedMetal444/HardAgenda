@@ -1096,7 +1096,7 @@ class TurneroApp(QTabWidget):
         logo_path = os.path.join(BASE_PATH, 'resources', 'logo_small.png')
         if os.path.exists(logo_path):
             lbl_logo = QLabel()
-            lbl_logo.setPixmap(QIcon(logo_path).pixmap(80, 80))
+            lbl_logo.setPixmap(QIcon(logo_path).pixmap(160, 160))
             logo_row.addWidget(lbl_logo)
         layout.addLayout(logo_row)
 
