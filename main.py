@@ -215,7 +215,7 @@ class LoginWindow(QWidget):
         self.main_window.container.show()
 
 
-HIGHLIGHT_STYLE = "background-color: #d4edda; font-weight: bold; border-left: 4px solid #28a745;"
+HIGHLIGHT_STYLE = "background-color: #1b3a20; font-weight: bold; border-left: 4px solid #28a745; color: #e0e0e0;"
 NORMAL_STYLE = ""
 
 
@@ -251,7 +251,7 @@ class TurneroApp(QTabWidget):
         self.currentChanged.connect(self._on_tab_changed)
 
         self.link_cerrar_sesion = QLabel(
-            "<a href='#' style='color: grey; text-decoration: underline;'>Cerrar sesion</a>"
+            "<a href='#' style='color: #6b7280; text-decoration: underline;'>Cerrar sesion</a>"
         )
         self.link_cerrar_sesion.linkActivated.connect(self.cerrar_sesion)
 
@@ -424,8 +424,8 @@ class TurneroApp(QTabWidget):
             item = QListWidgetItem(texto)
             item.setData(Qt.ItemDataRole.UserRole, t['id'])
             if idx == 0:
-                item.setBackground(QBrush(QColor("#d4edda")))
-                item.setForeground(QBrush(QColor("#155724")))
+                item.setBackground(QBrush(QColor("#1b3a20")))
+                item.setForeground(QBrush(QColor("#e0e0e0")))
                 item.setFont(QFont("Open Sans", 11, QFont.Weight.Bold))
                 item.setToolTip("TURNO ACTUAL")
             self.lista_hoy.addItem(item)
@@ -1098,7 +1098,7 @@ class TurneroApp(QTabWidget):
 
         link_email = QLabel(
             "<a href='mailto:abelgodoy.1802@gmail.com?subject=REPORTE%20-%20HardAgenda%20V1.0.0' "
-            "style='color: #0078d4;'>abelgodoy.1802@gmail.com</a>"
+            "style='color: #64b5f6;'>abelgodoy.1802@gmail.com</a>"
         )
         link_email.setFont(QFont("Open Sans", 11))
         link_email.setOpenExternalLinks(True)
@@ -1135,7 +1135,7 @@ class TurneroApp(QTabWidget):
         )
         link_reportar = QLabel(
             f"<a href='mailto:abelgodoy.1802@gmail.com?subject=REPORTE%20-%20HardAgenda%20V1.0.0&body={reporte_body}' "
-            f"style='color: #0078d4;'>Reportar un problema</a>"
+            f"style='color: #64b5f6;'>Reportar un problema</a>"
         )
         link_reportar.setFont(QFont("Open Sans", 11))
         link_reportar.setOpenExternalLinks(True)
@@ -1164,6 +1164,52 @@ if __name__ == "__main__":
     sys.excepthook = excepcion_no_manejada
 
     app = QApplication(sys.argv)
+    app.setStyleSheet("""
+        QWidget { background-color: #1a1a1a; color: #e0e0e0; }
+        QLabel { color: #e0e0e0; }
+        QLineEdit, QTimeEdit, QDateEdit {
+            background-color: #242424; color: #e0e0e0; border: 1px solid #2e2e2e;
+            border-radius: 4px; padding: 4px;
+        }
+        QLineEdit:focus, QTimeEdit:focus, QDateEdit:focus { border: 1px solid #28a745; }
+        QTableWidget {
+            background-color: #242424; color: #e0e0e0; gridline-color: #2e2e2e;
+            border: 1px solid #2e2e2e; border-radius: 4px;
+        }
+        QTableWidget::item:selected { background-color: #1b3a20; color: #e0e0e0; }
+        QHeaderView::section {
+            background-color: #2e2e2e; color: #e0e0e0; border: 1px solid #1a1a1a;
+            padding: 4px; font-weight: bold;
+        }
+        QListWidget {
+            background-color: #242424; color: #e0e0e0; border: 1px solid #2e2e2e;
+            border-radius: 4px;
+        }
+        QListWidget::item:selected { background-color: #1b3a20; color: #e0e0e0; }
+        QPushButton {
+            background-color: #28a745; color: #000000; border: none;
+            border-radius: 4px; padding: 6px 16px; font-weight: bold;
+        }
+        QPushButton:hover { background-color: #4CAF50; }
+        QPushButton:pressed { background-color: #155724; }
+        QTabWidget::pane { border: none; }
+        QTabBar::tab {
+            background-color: #242424; color: #6b7280; padding: 8px 16px;
+            border: none; border-bottom: 2px solid transparent;
+        }
+        QTabBar::tab:selected { color: #28a745; border-bottom: 2px solid #28a745; }
+        QTabBar::tab:hover { color: #e0e0e0; }
+        QCheckBox { color: #e0e0e0; spacing: 6px; }
+        QCheckBox::indicator {
+            width: 16px; height: 16px; border-radius: 3px;
+            border: 1px solid #6b7280; background-color: #242424;
+        }
+        QCheckBox::indicator:checked { background-color: #28a745; border-color: #28a745; }
+        QMenu { background-color: #242424; color: #e0e0e0; border: 1px solid #2e2e2e; }
+        QMenu::item:selected { background-color: #1b3a20; }
+        QMessageBox { background-color: #1a1a1a; }
+        QToolTip { background-color: #2e2e2e; color: #e0e0e0; border: 1px solid #28a745; }
+    """)
     icon_path = os.path.join(INTERNAL_PATH, 'resources', 'logo_small.png')
     if not os.path.exists(icon_path):
         icon_path = os.path.join(INTERNAL_PATH, 'resources', 'HardAgenda.ico')
