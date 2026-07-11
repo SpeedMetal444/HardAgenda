@@ -1115,9 +1115,9 @@ if __name__ == "__main__":
     sys.excepthook = excepcion_no_manejada
 
     app = QApplication(sys.argv)
-    icon_path = os.path.join(BASE_PATH, 'resources', 'HardAgenda.ico')
+    icon_path = os.path.join(BASE_PATH, 'resources', 'logo_small.png')
     if not os.path.exists(icon_path):
-        icon_path = os.path.join(BASE_PATH, 'resources', 'logo_default_large.png')
+        icon_path = os.path.join(BASE_PATH, 'resources', 'HardAgenda.ico')
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
     login_window = LoginWindow()
