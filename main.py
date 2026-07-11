@@ -1007,30 +1007,21 @@ class TurneroApp(QTabWidget):
     # ─── TAB ACERCA DE ───
 
     def init_tab_acerca(self):
-        tab_widget = QWidget()
-        tab_widget.paintEvent = lambda event: None
+        main_layout = QHBoxLayout(self.tab_acerca)
+        main_layout.setContentsMargins(0, 0, 0, 0)
 
-        bg_label = QLabel(tab_widget)
-        logo_bg_path = os.path.join(BASE_PATH, 'resources', 'logo_bg.png')
-        if os.path.exists(logo_bg_path):
-            pix = QPixmap(logo_bg_path)
-            bg_label.setPixmap(pix)
-            bg_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            bg_label.lower()
-
-        layout = QVBoxLayout(tab_widget)
+        text_widget = QWidget()
+        layout = QVBoxLayout(text_widget)
         layout.setContentsMargins(20, 20, 20, 20)
         layout.setAlignment(Qt.AlignmentFlag.AlignTop)
 
         lbl_titulo = QLabel("HardAgenda")
         lbl_titulo.setFont(QFont("Open Sans", 18, QFont.Weight.Bold))
-        lbl_titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(lbl_titulo)
 
         lbl_version = QLabel("Version 1.0.0")
         lbl_version.setFont(QFont("Open Sans", 11))
         lbl_version.setStyleSheet("color: #6b7280;")
-        lbl_version.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(lbl_version)
 
         layout.addSpacing(15)
@@ -1038,26 +1029,22 @@ class TurneroApp(QTabWidget):
         lbl_desc = QLabel("Sistema de gestion de turnos basado en Python y PostgreSQL.")
         lbl_desc.setFont(QFont("Open Sans", 11))
         lbl_desc.setWordWrap(True)
-        lbl_desc.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(lbl_desc)
 
         layout.addSpacing(20)
 
         lbl_desarrollador = QLabel("Desarrollado por:")
         lbl_desarrollador.setFont(QFont("Open Sans", 11, QFont.Weight.Bold))
-        lbl_desarrollador.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(lbl_desarrollador)
 
         lbl_nombre = QLabel("Abel Godoy")
         lbl_nombre.setFont(QFont("Open Sans", 11))
-        lbl_nombre.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(lbl_nombre)
 
         layout.addSpacing(10)
 
         lbl_email_titulo = QLabel("Contacto:")
         lbl_email_titulo.setFont(QFont("Open Sans", 11, QFont.Weight.Bold))
-        lbl_email_titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(lbl_email_titulo)
 
         link_email = QLabel(
@@ -1066,19 +1053,16 @@ class TurneroApp(QTabWidget):
         )
         link_email.setFont(QFont("Open Sans", 11))
         link_email.setOpenExternalLinks(True)
-        link_email.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(link_email)
 
         lbl_telefono = QLabel("+54 3795 320959")
         lbl_telefono.setFont(QFont("Open Sans", 11))
-        lbl_telefono.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(lbl_telefono)
 
         layout.addSpacing(20)
 
         lbl_soporte_titulo = QLabel("Soporte:")
         lbl_soporte_titulo.setFont(QFont("Open Sans", 11, QFont.Weight.Bold))
-        lbl_soporte_titulo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(lbl_soporte_titulo)
 
         reporte_body = (
@@ -1106,14 +1090,22 @@ class TurneroApp(QTabWidget):
         )
         link_reportar.setFont(QFont("Open Sans", 11))
         link_reportar.setOpenExternalLinks(True)
-        link_reportar.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(link_reportar)
 
         layout.addStretch()
 
-        self.tab_acerca_layout = QVBoxLayout(self.tab_acerca)
-        self.tab_acerca_layout.setContentsMargins(0, 0, 0, 0)
-        self.tab_acerca_layout.addWidget(tab_widget)
+        main_layout.addWidget(text_widget)
+
+        logo_widget = QWidget()
+        logo_layout = QVBoxLayout(logo_widget)
+        logo_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo_path = os.path.join(BASE_PATH, 'resources', 'logo_default_large.png')
+        if os.path.exists(logo_path):
+            lbl_logo = QLabel()
+            lbl_logo.setPixmap(QIcon(logo_path).pixmap(250, 250))
+            lbl_logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            logo_layout.addWidget(lbl_logo)
+        main_layout.addWidget(logo_widget)
 
 
 if __name__ == "__main__":
