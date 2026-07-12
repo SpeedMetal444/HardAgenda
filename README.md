@@ -24,7 +24,7 @@ Basado en la estetica y estructura de [InsCar](https://github.com/SpeedMetal444/
 
 ### Desktop (Windows)
 
-1. Descarga `HardAgenda_Setup_V1.1.0.exe` desde [Releases](https://github.com/SpeedMetal444/HardAgenda/releases)
+1. Descarga la ultima version de `HardAgenda_Setup.exe` desde [Releases](https://github.com/SpeedMetal444/HardAgenda/releases)
 2. Ejecuta el instalador
 3. Al iniciar la app, ingresa el serial de activacion (si no tenes uno, envia un correo a **abelgodoy.1802@gmail.com**)
 4. Ingresa IP y puerto del servidor (ej: `localhost` / `8080`)
