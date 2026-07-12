@@ -1229,8 +1229,34 @@ if __name__ == "__main__":
         app.setWindowIcon(QIcon(icon_path))
 
     if is_license_valid():
-        login_window = LoginWindow()
-        login_window.show()
+        if os.path.exists(CONFIG_PATH):
+            config = configparser.ConfigParser()
+            config.read(CONFIG_PATH, encoding='utf-8')
+            if config.has_section('database'):
+                saved_ip = config.get('database', 'server_ip', fallback='')
+                saved_user = config.get('database', 'user', fallback='')
+                if saved_ip and saved_user:
+                    saved_port = config.get('database', 'server_port', fallback='8080')
+                    saved_db = config.get('database', 'database', fallback='hardagenda_db')
+                    saved_pass = config.get('database', 'password', fallback='')
+                    server_url = f"http://{saved_ip}:{saved_port}"
+                    api_client.configure(server_url, saved_db, saved_user, saved_pass)
+                    resp = api_client.ping()
+                    if resp.get("status") == "ok":
+                        main_window = TurneroApp()
+                        main_window.container.show()
+                    else:
+                        login_window = LoginWindow()
+                        login_window.show()
+                else:
+                    login_window = LoginWindow()
+                    login_window.show()
+            else:
+                login_window = LoginWindow()
+                login_window.show()
+        else:
+            login_window = LoginWindow()
+            login_window.show()
     else:
         license_window = LicenseWindow()
         license_window.show()
