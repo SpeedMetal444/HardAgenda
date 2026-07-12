@@ -26,8 +26,9 @@ Basado en la estetica y estructura de [InsCar](https://github.com/SpeedMetal444/
 
 1. Descarga `HardAgenda_Setup_V1.1.0.exe` desde [Releases](https://github.com/SpeedMetal444/HardAgenda/releases)
 2. Ejecuta el instalador
-3. Inicia la app e ingresa IP y puerto del servidor (ej: `localhost` / `8080`)
-4. Marca "Crear base de datos y tablas" en el primer inicio
+3. Al iniciar la app, ingresa el serial de activacion (si no tenes uno, envia un correo a **abelgodoy.1802@gmail.com**)
+4. Ingresa IP y puerto del servidor (ej: `localhost` / `8080`)
+5. Marca "Crear base de datos y tablas" en el primer inicio
 
 ### Servidor (requerido)
 
@@ -88,7 +89,7 @@ El sistema de seriales es **experimental** y **sin fines de lucro**. Si necesita
 ## Uso
 
 1. Ejecuta el servidor (`HardAgendaServer.exe` o `python server.py`)
-2. Abri la aplicacion y completa los datos de conexion.
+2. Abri la app, ingresa el serial de activacion y completa los datos de conexion.
 3. Usa las pestanas para realizar acciones:
    - **Hoy**: Visualiza los turnos del dia. El primero aparece resaltado (turno actual). Presiona "Siguiente turno" para avanzar.
    - **Nuevo turno**: Carga los datos de un nuevo turno (Nombre, Apellido, DNI, Obra Social, Motivo de consulta).
